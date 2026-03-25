@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D立方体 - 纯红顶面 | 侧面绿到红渐变</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Microsoft YaHei', 'Segoe UI', 'PingFang SC', Roboto, 'Helvetica Neue', sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 18px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            pointer-events: none;
+            z-index: 10;
+            font-size: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border-left: 4px solid #ff3333;
+            font-weight: 500;
+        }
+        #controls-tip {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.5);
+            color: #ccc;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            font-family: monospace;
+            backdrop-filter: blur(4px);
+        }
+        @media (max-width: 600px) {
+            #info { font-size: 10px; top: 12px; left: 12px; }
+            #controls-tip { font-size: 9px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        ✨ 3D立方体 | <span style="color:#ff5555">顶面纯红</span> | 侧面 <span style="color:#55ff55">绿</span> → <span style="color:#ff5555">红</span> 渐变 (底部绿 → 顶部红)
+    </div>
+    <div id="controls-tip">
+        🖱️ 鼠标拖拽旋转视角 | 右键平移 | 滚动缩放
+    </div>
+
+    <!-- 引入 Three.js 核心库以及扩展组件 -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        // --- 初始化场景、相机、渲染器 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111122); // 深邃星空蓝黑背景，衬托色彩
+        scene.fog = new THREE.FogExp2(0x111122, 0.008); // 轻微雾效增强景深
+
+        // 透视相机 (视角, 宽高比, 近平面, 远平面)
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(3.5, 2.8, 4.5);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // 开启阴影映射增强立体感
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // --- 轨道控制，允许用户自由观察各个侧面和顶面 ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;          // 惯性效果
+        controls.dampingFactor = 0.05;
+        controls.rotateSpeed = 1.5;
+        controls.zoomSpeed = 1.2;
+        controls.panSpeed = 0.8;
+        controls.enableZoom = true;
+        controls.enablePan = true;
+        controls.target.set(0, 0, 0);
+        
+        // --- 辅助增强：轻微的环境光 + 主光源 + 补光，使渐变材质质感更丰富 ---
+        // 环境光 (均匀照亮，避免阴影过暗)
+        const ambientLight = new THREE.AmbientLight(0x404060, 0.65);
+        scene.add(ambientLight);
+        
+        // 主光源：方向光，从上方偏左前侧照射，凸显顶面红色和侧面渐变
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        mainLight.position.set(2, 5, 3);
+        mainLight.castShadow = true;
+        mainLight.receiveShadow = false;
+        mainLight.shadow.mapSize.width = 1024;
+        mainLight.shadow.mapSize.height = 1024;
+        scene.add(mainLight);
+        
+        // 辅助背光暖色，增强背面细节
+        const backLight = new THREE.PointLight(0xcc8866, 0.45);
+        backLight.position.set(-2, 1, -3);
+        scene.add(backLight);
+        
+        // 冷色侧补光，让绿色部分更鲜活
+        const fillLight = new THREE.PointLight(0x88aaff, 0.4);
+        fillLight.position.set(1, 1.5, 2.5);
+        scene.add(fillLight);
+        
+        // 一个微弱的底部暖光，让底面不至于太暗 (不影响整体视觉)
+        const bottomFill = new THREE.PointLight(0xffaa66, 0.25);
+        bottomFill.position.set(0, -1.8, 0);
+        scene.add(bottomFill);
+        
+        // 可选：一个小光晕效果 (简单辅助光)
+        const rimLight = new THREE.PointLight(0xffaa88, 0.3);
+        rimLight.position.set(1.2, 1.2, -2);
+        scene.add(rimLight);
+        
+        // --- 创建侧面的渐变纹理 (绿色 -> 红色，垂直方向: 底部绿，顶部红) ---
+        // 为了纹理清晰平滑，使用 512x512 的 canvas
+        const createGradientTexture = () => {
+            const size = 512;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // 创建线性渐变: 从顶部 (y=0) 红色 到底部 (y=size) 绿色
+            // 这样在UV映射中，V=1对应顶部显示红色，V=0对应底部显示绿色，实现“底部绿 -> 顶部红”的渐变
+            const gradient = ctx.createLinearGradient(0, 0, 0, size);
+            // 顶部红色 (V=1区域)
+            gradient.addColorStop(0, '#ff3333');    // 纯红 (鲜艳)
+            // 中部过渡色，让渐变更自然
+            gradient.addColorStop(0.35, '#ff8844');
+            gradient.addColorStop(0.65, '#88cc44');
+            // 底部绿色 (V=0区域)
+            gradient.addColorStop(1, '#33ff33');    // 鲜绿色
+            
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // 可选: 添加微妙的纹理颗粒感，避免过于平滑单调，提升质感 (极轻微噪点)
+            // 这步纯属增强视觉效果，不影响渐变主视觉
+            const imageData = ctx.getImageData(0, 0, size, size);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                // 极轻微的噪点，增加材质丰富度 (不影响色彩倾向)
+                const noise = (Math.random() - 0.5) * 12;
+                data[i] = Math.min(255, Math.max(0, data[i] + noise));     // R
+                data[i+1] = Math.min(255, Math.max(0, data[i+1] + noise)); // G
+                data[i+2] = Math.min(255, Math.max(0, data[i+2] + noise * 0.8)); // B
+            }
+            ctx.putImageData(imageData, 0, 0);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.ClampToEdgeWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.needsUpdate = true;
+            return texture;
+        };
+        
+        const gradientTexture = createGradientTexture();
+        
+        // 侧面材质：使用渐变纹理，带一点光泽感，让红色和绿色更生动
+        const sideMaterial = new THREE.MeshStandardMaterial({
+            map: gradientTexture,
+            roughness: 0.38,
+            metalness: 0.25,
+            emissive: 0x000000,
+            flatShading: false,
+            side: THREE.DoubleSide  // 为了内壁不显示，但双面渲染在边缘光线折射时更佳，不过一般外部可见即可，但为了旋转时内部不穿帮，双面无影响性能
+        });
+        
+        // 顶面材质：纯红色，带轻微光泽，与侧面红色过渡自然
+        const topMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff2222,
+            roughness: 0.32,
+            metalness: 0.2,
+            emissive: 0x220000,
+            emissiveIntensity: 0.08
+        });
+        
+        // 底面材质：深灰色带微紫，低调衬托主体 (不违反要求，用户只关注顶面和侧面)
+        const bottomMaterial = new THREE.MeshStandardMaterial({
+            color: 0x3a3a4a,
+            roughness: 0.5,
+            metalness: 0.1,
+            emissive: 0x111122,
+            emissiveIntensity: 0.05
+        });
+        
+        // 根据 Three.js BoxGeometry 材质索引顺序：
+        // 0: right (x正半轴面)
+        // 1: left  (x负半轴面)
+        // 2: up    (y正半轴面, 顶面)
+        // 3: down  (y负半轴面, 底面)
+        // 4: front (z正半轴面)
+        // 5: back  (z负半轴面)
+        const materials = [
+            sideMaterial,   // 右面 (渐变)
+            sideMaterial,   // 左面 (渐变)
+            topMaterial,    // 顶面 (纯红)
+            bottomMaterial, // 底面 (深灰)
+            sideMaterial,   // 前面 (渐变)
+            sideMaterial    // 后面 (渐变)
+        ];
+        
+        // 创建立方体几何体 (宽2，高2，深2，中心位于原点)
+        const geometry = new THREE.BoxGeometry(2, 2, 2);
+        const cube = new THREE.Mesh(geometry, materials);
+        cube.castShadow = true;
+        cube.receiveShadow = false; // 自身阴影投射到地面才开启，这里无需自身阴影复杂计算
+        scene.add(cube);
+        
+        // --- 添加一个极简的辅助网格地板 (半透明，帮助定位空间，但不干扰视觉) ---
+        const gridHelper = new THREE.GridHelper(6, 20, 0x88aaff, 0x446688);
+        gridHelper.position.y = -1.2;
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.25;
+        scene.add(gridHelper);
+        
+        // 添加一个非常微弱的轴向辅助线 (可选，便于观察方向，但不影响美观)
+        const axesHelper = new THREE.AxesHelper(2.2);
+        axesHelper.material.transparent = true;
+        axesHelper.material.opacity = 0.12;
+        scene.add(axesHelper);
+        
+        // 为了增强立体感，在立方体边缘添加白色细线框 (EdgesGeometry + LineSegments)
+        // 这样侧面渐变和顶面边界更清晰，视觉上更精致，同时不干扰色彩表现
+        const edgesGeo = new THREE.EdgesGeometry(geometry);
+        const edgesMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1 });
+        // 由于WebGL渲染器 linewidth 限制，但视觉效果依然清晰
+        const wireframe = new THREE.LineSegments(edgesGeo, edgesMat);
+        cube.add(wireframe); // 将线框附加到立方体上，随立方体旋转（立方体本身无旋转，但添加后整体跟随，保持边缘贴合）
+        
+        // 为了让顶面红色更亮眼，在顶面边缘添加微弱的发光光晕效果? 不使用额外后处理，而是增加一个小技巧:
+        // 在顶面上方增加一个半透明微弱光晕平面? 过于复杂，通过光照已经足够凸显顶面红色。
+        
+        // --- 可选：增加一个粒子背景 (星星效果) 提升视觉体验，但不影响主体 ---
+        const starGeometry = new THREE.BufferGeometry();
+        const starCount = 1200;
+        const starPositions = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount; i++) {
+            starPositions[i*3] = (Math.random() - 0.5) * 200;
+            starPositions[i*3+1] = (Math.random() - 0.5) * 100;
+            starPositions[i*3+2] = (Math.random() - 0.5) * 80 - 40;
+        }
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.08, transparent: true, opacity: 0.6 });
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+        
+        // 轻微旋转星星的动画 (很慢)
+        
+        // --- 辅助: 简单的浮动光点，围绕立方体缓慢旋转，增加动态效果 (非必要但增加科技感，不干扰观察渐变) ---
+        const particleCount = 300;
+        const particleGeo = new THREE.BufferGeometry();
+        const particlePositions = new Float32Array(particleCount * 3);
+        for (let i = 0; i < particleCount; i++) {
+            // 分布在立方体周围球壳区域
+            const radius = 1.8 + Math.random() * 1.2;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            particlePositions[i*3] = radius * Math.sin(phi) * Math.cos(theta);
+            particlePositions[i*3+1] = radius * Math.sin(phi) * Math.sin(theta);
+            particlePositions[i*3+2] = radius * Math.cos(phi);
+        }
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        const particleMat = new THREE.PointsMaterial({ color: 0xffaa77, size: 0.03, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending });
+        const particles = new THREE.Points(particleGeo, particleMat);
+        scene.add(particles);
+        
+        // --- 简单动画控制: 让星星和粒子缓慢自转，立方体本身不做自动旋转 (为了用户自由观察，但可以增加微动效果，不影响交互) ---
+        // 但我们保持立方体静态，用户通过OrbitControls旋转视角即可，这样渐变和顶面可以任意角度欣赏。
+        
+        // 添加一个小光晕效果在立方体周围？不需要，但为了让侧面红色部分与顶面呼应，可额外添加一个环境反射的微弱球体光晕。
+        
+        // 为了让渐变纹理的红色与绿色过渡更自然，确保纹理在材质初始化后刷新
+        // 由于canvas纹理已经创建，可以添加一个轻微的时间动态让星星旋转
+        
+        // 定义一个简单的动画循环：让星星和粒子系统缓慢旋转，增加沉浸感
+        let time = 0;
+        
+        // --- 响应窗口尺寸变化 ---
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // 为了使侧面渐变纹理效果更完美，可以稍微增加一点动态光泽？ 不修改核心颜色。
+        // 额外小优化：确保顶面材质不受渐变纹理影响，且保证其红色饱和。
+        
+        // 创建一个简单的CSS2D文字标签来指示颜色方向？ (可选，增加趣味)
+        // 为了清晰表达渐变方向，不加文字，但info中已经提示底部绿->顶部红
+        
+        // 渲染循环
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.005;
+            
+            // 让星星缓慢自转，营造星空流动感 (非常慢)
+            stars.rotation.y = time * 0.02;
+            stars.rotation.x = Math.sin(time * 0.1) * 0.1;
+            // 粒子系统围绕立方体缓慢公转效果? 简单让其整体旋转
+            particles.rotation.y = time * 0.1;
+            particles.rotation.x = Math.sin(time * 0.2) * 0.05;
+            
+            // 更新光源轻微移动，使光影有生气 (可选，让侧面渐变材质的光泽微变化)
+            const pulse = Math.sin(time * 1.2) * 0.1;
+            fillLight.intensity = 0.45 + pulse * 0.08;
+            rimLight.intensity = 0.32 + Math.sin(time * 1.5) * 0.06;
+            
+            // 更新轨道控制
+            controls.update(); // 如果用户没有交互，也需要更新以支持惯性
+            
+            // 渲染场景
+            renderer.render(scene, camera);
+        }
+        
+        animate();
+        
+        // 控制台输出就绪信息
+        console.log('3D立方体已加载 | 顶面纯红材质 | 侧面绿→红渐变(垂直方向:底部绿色→顶部红色)');
+        
+        // 一个小彩蛋: 为增加互动，点击立方体时改变顶面亮度？但为了保持需求纯粹，不改变核心结构。
+        // 保持完全符合题目: 顶面始终纯红，侧面始终绿到红渐变。
+    </script>
+</body>
+</html>
